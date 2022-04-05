@@ -25,8 +25,11 @@ class Scraper:
 
         # Getting HTML pages
         for link in soup.find_all('a'):
-            if self.base_url.replace("https://", "").replace("www", "") in link.get('href'):
-                links["html"].append(link.get('href'))
+            try:
+                if self.base_url.replace("https://", "").replace("www", "") in link.get('href'):
+                    links["html"].append(link.get('href'))
+            except TypeError:
+                continue
 
         # Getting scripts
         for script_link in soup.find_all('script'):
@@ -41,29 +44,30 @@ class Scraper:
                 links['scripts'].append(css_file.get('href'))
             else:
                 links['files'].append(css_file)
+
         return links
 
     def scrap_links_from_page(self) -> list:
-        # formatting url
-        if self.base_url[-1] == "/":
-            self.base_url = self.base_url[:-1]
 
         urls_to_scrape = [self.base_url]
         files = []
 
         print(f"Scrapping complete source code of {self.base_url}...")
 
-        for url in urls_to_scrape:
-            resp = self.session.get(url).text
-            files.append(resp)
-            found_links = self.get_links_from_html(resp)
-            for link in found_links['html']:
-                if link not in urls_to_scrape:
-                    urls_to_scrape.append(link)
-            for link in found_links['scripts']:
-                files.append(self.session.get(self.base_url + link).text)
+        for url in list(set(urls_to_scrape)):
+            try:
+                resp = self.session.get(url).text
+                files.append(resp)
+                found_links = self.get_links_from_html(resp)
+                for link in found_links['html']:
+                    if link not in urls_to_scrape:
+                        urls_to_scrape.append(link)
+                for link in list(set(found_links['scripts'])):
+                    files.append(self.session.get(self.base_url + link).text)
+            except requests.exceptions.ConnectionError:
+                pass
 
-        return files
+        return list(set(files))
 
     def search_contract_address(self) -> list:
         address_pattern = re.compile("0x[a-fA-F0-9]{40}")
@@ -77,6 +81,7 @@ class Scraper:
                 print("Smart Contract found: ", match.group(0))
                 results.append(match.group(0).lower())
 
+        results = list(set(results))
         self.write_results(results)
         return results
 
